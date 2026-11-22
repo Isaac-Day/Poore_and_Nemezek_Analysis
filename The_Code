@@ -1,0 +1,204 @@
+
+# Loading packages and data -----------------------------------------------
+# install.packages(c("Cairo", "showtext", "ggstatsplot", "tidyverse")) install the various packages we will use.
+
+library(tidyverse) # load tidyverse
+library(ggstatsplot) # load ggstatsplot
+library(showtext) # load showtext
+
+food_data <- read.csv("data/Food_Production_20231017.csv", header = TRUE) |> # load the data from the .csv file
+  distinct() # remove the 2 duplicated rows
+
+font_add_google("Libre Baskerville") # adding a nice, but legible serif font through showtext
+font_add_google("Montserrat") # adding a nice, simple sans serif font through showtext
+showtext_auto() # ensuring show text automatically applies these
+
+# My own question for Quant Checkpoint 2 ---------------------------------------------------------
+# My question: Is there a difference in land use change between animal and non-animal products
+# My variables: Animal_products (categorical), Land_use_change (numerical). Land_use_change will be our numerical outcome.
+# The test I am using: T-test as I am looking at whether or not there is a difference between two variables   
+# How I am checking assumptions: I will be using a histogram and boxplot to show skew/outliers, a table to show counts/sample sizes, 
+# and I will be using the Shapiro-Wilk test to check normality. 
+# If my data is skewed I will be using the Wilcoxon test as the non-parametric alternative.
+# The Plot I am using: I am using histograms and boxplots to get early glimpses of my data 
+# and will be using a blend between a boxplot, violin plot, and scatterplot with key statistical analysis breakdowns
+# this capacity is provided by ggstatsplot.
+# H0: There is no difference in the average land use change between animal and non-animal products 
+# H1: There is a difference in the average land use change between animal and non-animal products 
+# My guess: is that H1 is true.
+
+# Cleaning my data --------------------------------------------------------
+food_data$Dietary_role[is.na(food_data$Dietary_role)] <- "Oils"  # the 2 oils with no dietary role
+food_data$Animal_products[is.na(food_data$Animal_products)] <- "Non-animal product"
+# assigning non-animal products to the N/As in Animal_products. 
+# Those items are: Palm Oil, Sunflower Oil, and Other fruits. 
+# All can be reasonably classified as non-animal products
+
+table(food_data$Dietary_role, useNA = "ifany") # Checking for NAs to ensure script worked
+
+# Summarizing my data -----------------------------------------------------
+food_data |> # telling R to look in this dataframe
+  group_by(Animal_products) |> # telling R to group my numeric variable (Land_use_change) by my categorical variable (Animal_products)
+  summarize(n = n(), # telling R to summarize the total number of observations in each group
+            Median = median(Land_use_change), # telling R to give me the median (middle) value
+            Mean = mean(Land_use_change), # telling R to give me the mean (sum divided by count) value
+            SD = sd(Land_use_change), # telling R to give me the standard deviation (value spread from the mean)
+            IQR = IQR(Land_use_change), # telling R to give me the interquartile range (the middle 50%) of my data
+            Min = min(Land_use_change), # telling R to give me the minimum (lowest value observed) value
+            max = max(Land_use_change)) |> # telling R to give me the maximum (highest value observed) value
+  arrange(desc(Median)) # arranging the data from largest to smallest based on the median value by group
+
+# utilizing the Freedman-Diaconis rule to determine the best # of bins for a histogram plot
+# this is important as too many or too few can change what our data represents
+best_bins <- nclass.FD(food_data$Land_use_change) 
+# the Freedman-Diaconis rule is best for this as it automatically adjusts to dataset
+# size and variation. It also works well with outliers! A full breakdown can be found below:
+# https://leanoutsidethebox.com/freedman-diaconis-rule/
+
+# now we make our histogram plot! This will help visualize the data and any skewness
+Distribution_histogram <- ggplot(food_data, aes(x = Land_use_change, # wanted a cooler plot than the generic histogram
+                      fill = Animal_products)) + # this way we can differentiate the spread
+  geom_histogram(color = "black", # giving the histogram a black outline
+                 linewidth = 0.25, # making that outline small
+                 linetype = 1, # assigning a line type
+                 alpha = 0.5, # making it 50% transparent
+                 position = "identity", # this lets each group share the space for better visualization
+                 bins = best_bins) + # assigning the ideal number of bins according to the Freedman-Diaconis rule
+  geom_vline(aes(xintercept = mean(Land_use_change, # making a line appear at the mean of my land use variable
+                                   na.rm = TRUE)), # telling r to ignore any NAs in the column
+                 color = "#191970", # I like the midnight blue color for this
+                 linetype = "dashed", # making the line dashed for better interpretation in print
+                 size = .5) + # I liked this thickness for the line
+  guides(fill = guide_legend(title = "Product Type")) + # assigning my legend title
+  scale_fill_manual(values = c("black", "white")) + # updating the colors of my two groups for visualization
+  theme(legend.position = "bottom", # moving our legend to bottom middle
+        plot.title.position = "plot", # slightly adjusting the position of the plot title
+        plot.title = element_text(family =  "Libre Baskerville", # updating title font
+                                  size = 20, # updating title size
+                                  face = "bold", # making our title bold
+                                  color = "black"), # changing title text color to black
+        text = element_text(family = "Montserrat", # making the rest of our text montserrat
+                            size = 12, # adjusting font
+                            color = "black"), # assigning the color black
+        axis.title = element_text(size = 16), # adjusting our axis title size 
+        axis.ticks = element_blank(), # removing ticks
+        axis.text = element_text(size = 10, # adjusting our tiny numbers size
+                                 color = "black", # making tiny numbers black
+                                 family = "Montserrat"), # giving those tiny numbers montserrat
+        axis.line = element_line(color = "lightgrey"), # I liked lightgrey for a fainter look
+        panel.grid = element_line(color = "lightgrey"),
+        panel.background = element_blank(), 
+        plot.background = element_rect(fill = "white", # making the general plot background white
+                                       color = "white"),
+        legend.background = element_rect(fill= "white", # making the legend background white
+                                         color = "white")) + 
+  labs(title = "Distribution of Average Land Use Change of Animal and Non-animal Products",
+       x = bquote("Average Land Use Change per Year"~(m^2)), # these three lines are just updating all our titles
+       y = "Observations")
+
+Distribution_histogram
+# data has a right-leaning skew for both animal and non-animal products
+
+# saving my plot to png for use in my report
+ggsave("Distribution_histogram.png", # assigning the download title
+       plot = Distribution_histogram, # specifying which plot
+       width = 8.5, # assigning width and height for a typical word doc
+       height = 6.0, 
+       units = "in", # telling r what units to use (inches)
+       dpi = 300) # 300 dpi for a high quality look
+
+# I do these steps to look at my data and determine what the best test might be. 
+# Looking for skewness, distribution, mean, and median values 
+
+# Testing my data ---------------------------------------------------------
+# Output: t = 1.245, df = 10.631, p-value = 0.2399 (23%)
+t.test(Land_use_change ~ Animal_products, data = food_data)
+# The t-test is being utilized because I am looking for a difference between 2 groups,
+# but it will be unreliable because there is right-leaning skew.
+
+# Checking my assumptions -------------------------------------------------
+# I already did some preemptive checks with descriptive statistics and early visualizations, 
+# but we are also going to use the Shapiro-Wilk test to see if my data is roughly normal.
+shapiro.test(food_data$Land_use_change[food_data$Animal_products == "Animal product"])
+# The P-value of this tests has its own hypothesis (below) and tests to see if its true.
+# Shapiro H0: Data is normally distributed.
+# Shapiro H1: Data is not normally distributed.
+# Output: p-value = 2.275e-05 (0.00002275). 
+# This means the data is NOT normal (Animal products have heavy outliers that skew the data.)
+
+
+# Re-testing my data ------------------------------------------------------
+# With 10 and 33 foods and a strong skew, the t-test is shaky. Use the non-parametric test:
+wilcox.test(Land_use_change ~ Animal_products, data = food_data, exact = FALSE)
+# Output: W = 277, p-value = 0.001099
+# In this instance the W-value is the number of times the land-use change of non-animal products 
+# is less than land-use change of animal products.This is based on alphabetically sorting the Animal_products column.
+# Whereas the P-value is indicating whether or not the medians of these two distributions differ (they do!)
+
+
+# Plotting my data --------------------------------------------------------
+Land_use_by_product_plot <- ggbetweenstats(data = food_data, # creating an object to house my plot
+                      x = Animal_products, # assigning my categorical variable, Animal_products to the x value
+                      y = Land_use_change, # assigning my numerical variable, Land_use_change to the y value
+                      type  = "nonparametric",# ensuring ggstatsplot knows that a parametric test is not adequate for my data
+                      centrality.label.args = list(size = 8, # adjusting size of the median text here
+                                                   color = "black",
+                                                   alpha = 0.5), 
+                      ggstatsplot.layer = FALSE, # turning off base ggstatsplot parameters so I can utilize ggplot2 commands
+                      boxplot.args = list(linewidth = 0.5, # adjusting the line width of my boxplot lines
+                                          width = 0.3, # adjusting the overall width of my boxplots
+                                          alpha = 0.6, # assigning the transparency of my boxplots
+                                          fill = "white"), # assigning the color white to the fill of my boxplots
+                      violin.args = list(linewidth = 0.6, # adjusting the line width of the violin plots
+                                         adjust = 3, # making my violin plots look "smoother"
+                                         alpha = 0.1, # adjusting the transparency of my violin plots.
+                                         trim = FALSE), # making it so my violin plots don't get cut off early
+                      point.args = list(position = position_jitterdodge(jitter.width = 0.1), # giving my density dots some aura
+                                        size = 2, # assigning the size of my dots
+                                        alpha = 1, # assigning the transparency of my dots
+                                        color = "#191970")) + # giving my dots a midnight blue hexcode
+  labs(x = NULL, # adjusting label and title parameters with ggplot 2
+       y = bquote("Average land use change per year" ~(m^2)), # adjusting my y label and using bquote to make it look cool and squared
+       title = "Average land use change of animal products versus non-animal products per year") + # giving it a hip title
+  theme(text = element_text(family = "Montserrat", # Montserrat font for general text
+                            size = 18, # adjusting font
+                            color = "black"), # going with black for the text for a professional look
+        axis.title.y = element_text(size = 16, # adjusting font
+                                    color = "black",
+                                    face = "bold"), 
+        plot.title = element_text(family =  "Libre Baskerville", # giving my title a serif font because I'm cool
+                                  size = 20, # assigning the size of my title
+                                  face = "bold", # making my title bold!
+                                  color = "black"), # assigning black to my title as well
+        plot.subtitle = element_text(family = "Montserrat", # those cool numbers under the title get Montserrat
+                                     size = 16, # adjusting font size for our stats info
+                                     face = "bold", # more bold!
+                                     color="black"), # you'll never guess
+        plot.title.position = "plot", # moves it a lil, but just a lil
+        axis.text = element_text(size = 12, # adjusting font
+                                 color = "black"), 
+        axis.ticks = element_blank(), # no ticks outside the gridline
+        axis.line = element_line(color = "grey"), # going with some grey for balance
+        panel.grid = element_line(color = "grey"),
+        panel.grid.minor = element_blank(), # giving a bit of a border
+        panel.grid.major.x = element_blank(), # also a bit of a border
+        panel.grid.major.y = element_line(linetype = "dashed"), # those hip, dashed lines at my variable intervals
+        panel.background = element_rect(fill = "white", color = "white"), # white for my background
+        plot.background = element_rect(fill = "white", color = "white"))
+Land_use_by_product_plot # get a glimpse of that bad boy
+
+# saving my plot to png for use in my report
+ggsave("Land_use_by_product_plot.png", # assigning the download title
+       plot = Land_use_by_product_plot, # specifying which plot
+       width = 6.5, # assigning width and height for a typical word doc
+       height = 4.0, 
+       units = "in", # telling r what units to use (inches)
+       dpi = 300) # 300 dpi for a high quality look
+
+# ?ggstatsplot this was helpful, it can stay. As a treat.
+
+# Clean Up ----------------------------------------------------------------
+rm(list = ls())
+if (!is.null(dev.list())) dev.off()
+cat("\014")
+
